@@ -1,0 +1,93 @@
+# server and discovery configuration
+server:
+  port: 8080
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    instance-id: ${spring.application.name}:${random.value}
+
+# application configuration      
+spring:
+  application:
+    name: API-GATEWAY
+    
+  cloud:
+    gateway:
+      default-filters:
+      - AddRequestHeader=Content-type, application/json
+      - AddResponseHeader=X-Response-port, 8080
+      discovery:
+        locator:
+          enabled: true # The DiscoveryClient Route Definition Locator - Netflix Eureka, Consul, or Zookeeper
+      routes:
+      - id: USER-SERVICE
+        uri: http://localhost:8085
+        predicates:
+        - Path=/api/v1/users/**
+        filters:
+        - name: CircuitBreaker
+          args:
+           name: servicescircutebreaker
+           fallbackUri: forward:/fallback/service/USER-SERVICE
+        - name: AuthanticationFilter   
+      - id: WORKSPACE-SERVICE
+        uri: http://localhost:8086
+        predicates:
+        - Path=/api/v1/workspaces/**
+        filters:
+        - name: CircuitBreaker
+          args:
+           name: servicescircutebreaker
+           fallbackUri: forward:/fallback/service/WORKSPACE-SERVICE
+        - name: AuthanticationFilter
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+    instances: 
+      servicescircutebreaker:
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 20s
+
+# Monitoring 
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+      group:
+        readiness:
+          include: '*'
+          show-details: always
+        liveness:
+          show-details: always
+          include: ping
+    gateway:
+      enabled: true
+      
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+        
+#JWT Configuration      
+jwt:
+  secret: testing
+  expirationMs: 86400000
+  authDisabled: false
+  unauthPath: 
+  - /api/v1/users/auth/signin
+  - /api/v1/users/auth/signup
+  - /api/v1/users/auth/forgot-password
+  - /api/v1/users/auth/reset-password
+  - /api/v1/workspaces/info-unauth
